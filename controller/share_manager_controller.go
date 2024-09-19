@@ -1140,19 +1140,36 @@ func (c *ShareManagerController) cleanupService(shareManager *longhorn.ShareMana
 	return nil
 }
 
-func (c *ShareManagerController) createServiceAndEndpoint(shareManager *longhorn.ShareManager) error {
+func (c *ShareManagerController) createService(shareManager *longhorn.ShareManager, name string) error {
 	// check if we need to create the service
-	_, err := c.ds.GetService(c.namespace, shareManager.Name)
+	_, err := c.ds.GetService(c.namespace, name)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to get service for share manager %v", shareManager.Name)
+			return errors.Wrapf(err, "failed to get service %v for share manager %v", name, shareManager.Name)
 		}
 
-		c.logger.Infof("Creating Service for share manager %v", shareManager.Name)
-		_, err = c.ds.CreateService(c.namespace, c.createServiceManifest(shareManager))
+		c.logger.Infof("Creating Service %v for share manager %v", name, shareManager.Name)
+		_, err = c.ds.CreateService(c.namespace, c.createServiceManifest(shareManager, name))
 		if err != nil {
-			return errors.Wrapf(err, "failed to create service for share manager %v", shareManager.Name)
+			return errors.Wrapf(err, "failed to create service %v for share manager %v", name, shareManager.Name)
 		}
+	}
+
+	return nil
+}
+
+func (c *ShareManagerController) createServiceAndEndpoint(
+	shareManager *longhorn.ShareManager,
+	pvcName string,
+	pvNamespace string,
+) error {
+	err := c.createService(shareManager, shareManager.Name)
+	if err != nil {
+		return err
+	}
+	err = c.createService(shareManager, pvcName+"_"+pvNamespace)
+	if err != nil {
+		return err
 	}
 
 	// Only create the Endpoint if it doesn't exist. For service using the selector, the Endpoint will be created by the service controller.
@@ -1217,7 +1234,15 @@ func (c *ShareManagerController) createShareManagerPod(sm *longhorn.ShareManager
 		return nil, errors.Wrapf(err, "failed to cleanup service for share manager %v", sm.Name)
 	}
 
-	err = c.createServiceAndEndpoint(sm)
+	volume, err := c.ds.GetVolume(sm.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	pvcName := volume.Status.KubernetesStatus.PVCName
+	pvNamespace := volume.Status.KubernetesStatus.Namespace
+
+	err = c.createServiceAndEndpoint(sm, pvcName, pvNamespace)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create service and endpoint for share manager %v", sm.Name)
 	}
@@ -1249,11 +1274,6 @@ func (c *ShareManagerController) createShareManagerPod(sm *longhorn.ShareManager
 			}
 		}
 
-	}
-
-	volume, err := c.ds.GetVolume(sm.Name)
-	if err != nil {
-		return nil, err
 	}
 
 	pv, err := c.ds.GetPersistentVolume(volume.Status.KubernetesStatus.PVName)
@@ -1383,10 +1403,10 @@ func (c *ShareManagerController) splitFormatOptions(sc *storagev1.StorageClass) 
 	return nil
 }
 
-func (c *ShareManagerController) createServiceManifest(sm *longhorn.ShareManager) *corev1.Service {
+func (c *ShareManagerController) createServiceManifest(sm *longhorn.ShareManager, name string) *corev1.Service {
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            sm.Name,
+			Name:            name,
 			Namespace:       c.namespace,
 			OwnerReferences: datastore.GetOwnerReferencesForShareManager(sm, false),
 			Labels:          types.GetShareManagerInstanceLabel(sm.Name),
