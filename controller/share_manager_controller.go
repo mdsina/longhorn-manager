@@ -1158,7 +1158,7 @@ func (c *ShareManagerController) createServiceAndEndpoint(
 	if err != nil {
 		return err
 	}
-	err = c.createService(shareManager, pvcName+"_"+pvNamespace)
+	err = c.createService(shareManager, pvcName+"-"+pvNamespace)
 	if err != nil {
 		return err
 	}
