@@ -70,6 +70,9 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
+    - name: Add SHORT_SHA env property with commit short sha
+      run: echo "SHORT_SHA=`git rev-parse --short HEAD`" >> $GITHUB_ENV
+
     # longhornio/longhorn-manager image
     - name: docker-publish
       if: ${{ startsWith(github.ref, 'refs/heads/') }}
@@ -78,7 +81,7 @@ jobs:
         context: ./
         push: true
         platforms: linux/amd64,linux/arm64
-        tags: mdsina/longhorn-manager:${{ env.branch }}-head
+        tags: mdsina/longhorn-manager:${{ env.branch }}-head , mdsina/longhorn-manager:${{ env.branch }}-${{ env.SHORT_SHA }}
         file: package/Dockerfile
         sbom: true
 
