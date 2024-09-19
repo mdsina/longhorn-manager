@@ -1078,8 +1078,8 @@ func (c *ShareManagerController) checkStorageNetworkApplied() (bool, error) {
 	return true, nil
 }
 
-func (c *ShareManagerController) canCleanupService(shareManagerName string) (bool, error) {
-	service, err := c.ds.GetService(c.namespace, shareManagerName)
+func (c *ShareManagerController) canCleanupService(name string) (bool, error) {
+	service, err := c.ds.GetService(c.namespace, name)
 	if err != nil {
 		// if NotFound, means the service/endpoint is already cleaned up
 		// The service and endpoint are related with the kubernetes endpoint controller.
@@ -1118,19 +1118,19 @@ func (c *ShareManagerController) canCleanupService(shareManagerName string) (boo
 	return true, nil
 }
 
-func (c *ShareManagerController) cleanupService(shareManager *longhorn.ShareManager) error {
-	if ok, err := c.canCleanupService(shareManager.Name); !ok || err != nil {
+func (c *ShareManagerController) cleanupServiceByName(shareManager *longhorn.ShareManager, name string) error {
+	if ok, err := c.canCleanupService(name); !ok || err != nil {
 		if err != nil {
-			return errors.Wrapf(err, "failed to check if we can cleanup service and endpoint for share manager %v", shareManager.Name)
+			return errors.Wrapf(err, "failed to check if we can cleanup service %v and endpoint for share manager %v", name, shareManager.Name)
 		}
 		return nil
 	}
 
 	// let's cleanup
-	c.logger.Infof("Deleting Service for share manager %v", shareManager.Name)
-	err := c.ds.DeleteService(c.namespace, shareManager.Name)
+	c.logger.Infof("Deleting Service %v for share manager %v", name, shareManager.Name)
+	err := c.ds.DeleteService(c.namespace, name)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return errors.Wrapf(err, "failed to delete service for share manager %v", shareManager.Name)
+		return errors.Wrapf(err, "failed to delete service %v for share manager %v", name, shareManager.Name)
 	}
 
 	// we don't need to cleanup the endpoint because the kubernetes endpoints_controller
@@ -1138,6 +1138,14 @@ func (c *ShareManagerController) cleanupService(shareManager *longhorn.ShareMana
 	// https://github.com/kubernetes/kubernetes/blob/v1.31.0/pkg/controller/endpoint/endpoints_controller.go#L374-L392
 
 	return nil
+}
+
+func (c *ShareManagerController) cleanupService(shareManager *longhorn.ShareManager, pvcName string, pvNamespace string) error {
+	err := c.cleanupServiceByName(shareManager, shareManager.Name)
+	if err != nil {
+		return err
+	}
+	return c.cleanupServiceByName(shareManager, pvcName+"-"+pvNamespace)
 }
 
 func (c *ShareManagerController) createService(shareManager *longhorn.ShareManager, name string) error {
@@ -1229,11 +1237,6 @@ func (c *ShareManagerController) createShareManagerPod(sm *longhorn.ShareManager
 	}
 	priorityClass := setting.Value
 
-	err = c.cleanupService(sm)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to cleanup service for share manager %v", sm.Name)
-	}
-
 	volume, err := c.ds.GetVolume(sm.Name)
 	if err != nil {
 		return nil, err
@@ -1241,6 +1244,11 @@ func (c *ShareManagerController) createShareManagerPod(sm *longhorn.ShareManager
 
 	pvcName := volume.Status.KubernetesStatus.PVCName
 	pvNamespace := volume.Status.KubernetesStatus.Namespace
+
+	err = c.cleanupService(sm, pvcName, pvNamespace)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to cleanup service for share manager %v", sm.Name)
+	}
 
 	err = c.createServiceAndEndpoint(sm, pvcName, pvNamespace)
 	if err != nil {
