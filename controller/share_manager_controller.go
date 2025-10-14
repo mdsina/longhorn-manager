@@ -894,6 +894,11 @@ func (c *ShareManagerController) syncShareManagerPod(sm *longhorn.ShareManager) 
 		}
 	}
 
+	if pod == nil {
+		log.Warnf("Share Manager's %s related pod is pending?", sm.Name)
+		return errors.Wrap(err, "pod for share manager is nil")
+	}
+
 	// If the node where the pod is running on become defective, we clean up the pod by setting sm.Status.State to STOPPED or ERROR
 	// A new pod will be recreated by the share manager controller.  We might get an early warning of that by the pod going stale.
 	isStale, _, err := c.isShareManagerPodStale(sm)
