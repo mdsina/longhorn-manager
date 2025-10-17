@@ -1153,7 +1153,12 @@ func (c *ShareManagerController) cleanupService(shareManager *longhorn.ShareMana
 	return c.cleanupServiceByName(shareManager, pvcName+"-"+pvNamespace)
 }
 
-func (c *ShareManagerController) createService(shareManager *longhorn.ShareManager, name string) error {
+func (c *ShareManagerController) createService(shareManager *longhorn.ShareManager, fullName string) error {
+	runes := []rune(fullName)
+	name := fullName
+	if len(runes) > 63 {
+		name = string(runes[:63])
+	}
 	// check if we need to create the service
 	_, err := c.ds.GetService(c.namespace, name)
 	if err != nil {
