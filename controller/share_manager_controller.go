@@ -1150,7 +1150,13 @@ func (c *ShareManagerController) cleanupService(shareManager *longhorn.ShareMana
 	if err != nil {
 		return err
 	}
-	return c.cleanupServiceByName(shareManager, pvcName+"-"+pvNamespace)
+
+	name := pvcName + "-" + pvNamespace
+	runes := []rune(name)
+	if len(runes) > 63 {
+		name = string(runes[:63])
+	}
+	return c.cleanupServiceByName(shareManager, name)
 }
 
 func (c *ShareManagerController) createService(shareManager *longhorn.ShareManager, fullName string) error {
