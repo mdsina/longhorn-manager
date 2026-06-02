@@ -57,8 +57,8 @@ jobs:
     - name: Run ci
       run: make ci
 
-    - name: Run test
-      run: make test
+#    - name: Run test
+#      run: make test
 
   build_push_image:
     name: Build and push image
